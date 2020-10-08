@@ -1,6 +1,6 @@
 * Keval 
   
-  A sample of intepreter with explict continuation.
+  A sample intepreter with explict continuation.
 
 ** Usage
 
