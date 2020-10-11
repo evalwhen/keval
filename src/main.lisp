@@ -102,3 +102,69 @@
          (set-variable-env-value! r v) ;; set object slot
          (resume k v))
         (update! (variable-env-others r) n k v)))
+
+;; evaluate-lambda =========================================
+
+(defclass function (value) (variables body env))
+
+(def (evaluate-lambda n* e* r k)
+  (resume k (make-function n* e* r)))
+
+(defmethod (invoke (f function) v* r k)
+    (let ((env (extend-env (function-env f)
+                           (function-variables f)
+                           v*)))
+      (evaluate-begin (function-body f) env k)))
+
+(defun (extend-env env names values)
+    (cond ((and (pair? names) (pair? values))
+           (make-variable-env (extend-env env (cdr names) (cdr values))
+                              (car names)
+                              (cdr values)))
+          ((and (null? names) (null? values))
+           env)
+          ((symbol? names) (make-variable-env env names values))
+          (else (wrong "Arity mismatch"))))
+
+;; evaluate-application ==========================================
+(defclass evfun-cont (continuation) (e* r))
+(defclass apply-cont (continuation) (f r))
+(defclass argument-cont (continuation) (e* r))
+(defclass gather-cont (continuation) (v))
+
+(defun (evaluate-application e e* r k)
+  (evaluate e r (make-evfun-cont k e* r)))
+
+(defmethod (resume (k evfun-cont) f)
+    (evaluate-arguments
+     (evfun-cont-e* k)
+     (evfun-cont-r k)
+     (make-apply-cont
+      (evfun-cont-k k)
+      f
+      (evfun-cont-r k))))
+
+(defun (evaluate-arguments e* r k)
+    (if (pair? e*)
+        (evaluate (car e*) r (make-argument-cont k e* r))
+        (resume k no-more-auguments)))
+
+(defvar no-more-arguments '())
+
+(defmethod (resume (k argument-cont) v)
+    (evaluate-arguments
+     (cdr (argument-cont-e* k))
+     (argument-cont-r k)
+     (make-gather-cont
+      (argument-cont-k k)
+      v)))
+
+(defmethod (resume (k gather-cont) v*)
+  (resume (gather-cont-k k) (cons (gather-cont-v k) v*)))
+
+(defmethod (resume (k apply-cont) v)
+    (invoke
+     (apply-cont-f k)
+     v
+     (apply-cont-r k)
+     (apply-cont-k k)))
