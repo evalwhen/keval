@@ -30,6 +30,7 @@
 
 ;; evaluate-if ========================================
 (defclass if-cont (continuation) (et ef r))
+
 (defun make-if-cont (k et ef r)
   (make-instance 'if-cont :k k :et et :ef ef :r r))
 
@@ -48,9 +49,12 @@
 ;; evaluate-begin ========================================
 (defclass begin-cont (continuation) (e* r))
 
+(defun make-begin-cont (k e* r)
+  (make-instance 'begin-cont :k k :e* e* :r r))
+
 (defun evaluate-begin (e* r k)
-    (if (pair? e*)
-        (if (pair? (cdr e*)) ;; // e* size bigger than 1
+    (if (consp e*)
+        (if (consp (cdr e*)) ;; // e* size bigger than 1
             (evaluate (car e*) r (make-begin-cont k e* r))
             (evaluate (car e*) k))
         (resume k empty-begin-value)))
@@ -64,9 +68,16 @@
 ;; variable: evaluate-variable and evaluate-set! =========================
 
 (defclass null-env (environment) ())
+
+(defun make-null-env ()
+  (make-instance 'null-env))
 ;; TODO: 为什么需要定义一个 full-env
 (defclass full-env (environment) (others name))
+
 (defclass variable-env (full-env) (value))
+
+(defun make-variable-env (others name value)
+  (make-instance 'variable-env :others others :name name :value value))
 
 (defun evaluate-variable (n r k)
   (lookup r n k))
@@ -85,6 +96,9 @@
 ;; evaluate-set!
 
 (defclass set!-cont (continuation) (n r))
+
+(defun make-set!-cont (k n r)
+  (make-instance 'set!-cont :k k :n n :r r))
 
 (defun evaluate-set! (n e r k)
   (evalue e r (make-set!-cont k n r)))
@@ -109,6 +123,9 @@
 
 (defclass proceture (value) (variables body env))
 
+(defun make-proceture (n* e* r)
+  (make-instance 'proceture :variables n* :body e* :env env))
+
 (defun evaluate-lambda (n* e* r k)
     (resume k (make-proceture n* e* r)))
 
@@ -119,7 +136,7 @@
       (evaluate-begin (proceture-body f) env k)))
 
 (defun extend-env (env names values)
-    (cond ((and (pair? names) (pair? values))
+    (cond ((and (consp names) (consp values))
            (make-variable-env (extend-env env (cdr names) (cdr values))
                               (car names)
                               (cdr values)))
@@ -130,9 +147,24 @@
 
 ;; evaluate-application ==========================================
 (defclass evfun-cont (continuation) (e* r))
+
+(defun make-evfun-cont (k e* r)
+  (make-instance 'evfun-cont :k k :e* e* :r r))
+
 (defclass apply-cont (continuation) (f r))
+
+(defun make-apply-cont (k f r)
+  (make-instance 'apply-cont :k k :f f :r r))
+
 (defclass argument-cont (continuation) (e* r))
+
+(defun make-argument-cont (k e* r)
+  (make-instance 'argument-cont :k k :e* e* :r r))
+
 (defclass gather-cont (continuation) (v))
+
+(defun make-gather-cont (k v)
+  (make-instance 'gather-cont :k v :v v))
 
 (defun evaluate-application (e e* r k)
   (evaluate e r (make-evfun-cont k e* r)))
@@ -147,11 +179,11 @@
       (evfun-cont-r k))))
 
 (defun evaluate-arguments (e* r k)
-    (if (pair? e*)
+    (if (consp e*)
         (evaluate (car e*) r (make-argument-cont k e* r))
         (resume k no-more-auguments)))
 
-(defvar no-more-arguments '())
+(defconstant no-more-arguments '())
 
 (defmethod resume ((k argument-cont) v)
     (evaluate-arguments
@@ -175,12 +207,8 @@
 
 (defvar r.init (make-null-env))
 
-;; (defmacro definitial (name value)
-;;   `(begin (set r.init (make-variable-env r.init ,name ,value))))
-
-(defun definitial (name value)
-    (set r.init (make-variable-env r.init name value)))
-
+(defmacro definitial (name value)
+  `(begin (set r.init (make-variable-env r.init ,name ,value))))
 
 (defclass primitive (value)
   ((name
@@ -189,21 +217,18 @@
    (address
     :accessor primitive-address)))
 
-;; (defmacro defprimitive (name value arity)
-;;   `(make-primitive name (lambda (v* r k)
-;;                           (if (= arity (length v*))
-;;                               (resume k (apply value v*))
-;;                               (wrong "Incorrect arity" name v*)))))
+(defun make-primitive (name address)
+  (make-instance 'primitive :name name :address address))
 
-(defun defprimitive (name value arity)
-  (make-primitive name (lambda (v* r k)
-                          (if (= arity (length v*))
-                              (resume k (apply value v*))
-                              (wrong "Incorrect arity" name v*)))))
+(defmacro defprimitive (name value arity)
+  `(definitial ,name
+      (make-primitive ,name (lambda (v* r k)
+                             (if (= arity (length v*))
+                                 (resume k (apply (function ,value) v*))
+                                 (wrong "Incorrect arity" ,name v*))))))
 
-
-(defprimitive 'cons cons 2)
-(defprimitive 'car car 1)
+;; (defprimitive cons cons 2)
+;; (defprimitive car car 1)
 
 (defmethod invoke ((f primitive) v* r k)
   (funcall (primitive-address f) v* r k))
@@ -211,6 +236,9 @@
 (defclass bottom-cont (continuation)
   ((f
     :accessor bottom-cont-f)))
+
+(defun make-bottom-cont (k f)
+  (make-bottom-cont 'bottom-cont :k k :f f))
 
 (defmethod resume ((k bottom-cont) v)
   (funcall (bottom-contf k) v))
