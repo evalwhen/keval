@@ -72,9 +72,15 @@
 (defun make-null-env ()
   (make-instance 'null-env))
 ;; TODO: 为什么需要定义一个 full-env
-(defclass full-env (environment) (others name))
+(defclass full-env (environment)
+  ((others
+    :initarg :others)
+   (name
+    :initarg :name)))
 
-(defclass variable-env (full-env) (value))
+(defclass variable-env (full-env)
+  ((value
+    :initarg :value)))
 
 (defun make-variable-env (others name value)
   (make-instance 'variable-env :others others :name name :value value))
@@ -205,16 +211,18 @@
 
 ;; bootstrap ===================================================
 
-(defvar r.init (make-null-env))
+(defvar rinit (make-null-env))
 
 (defmacro definitial (name value)
-  `(begin (set r.init (make-variable-env r.init ,name ,value))))
+  `(progn (setf rinit (make-variable-env rinit ',name ,value))
+          ',name))
 
 (defclass primitive (value)
   ((name
-    :initarg :no-name
+    :initarg :name
     :accessor primitive-name)
    (address
+    :initarg :address
     :accessor primitive-address)))
 
 (defun make-primitive (name address)
@@ -222,13 +230,13 @@
 
 (defmacro defprimitive (name value arity)
   `(definitial ,name
-      (make-primitive ,name (lambda (v* r k)
-                             (if (= arity (length v*))
-                                 (resume k (apply (function ,value) v*))
-                                 (wrong "Incorrect arity" ,name v*))))))
+      (make-primitive ',name (lambda (v* r k)
+                               (if (= arity (length v*))
+                                   (resume k (apply (function ,value) v*))
+                                   (wrong "Incorrect arity" ',name v*))))))
 
-;; (defprimitive cons cons 2)
-;; (defprimitive car car 1)
+(defprimitive cons cons 2)
+(defprimitive car car 1)
 
 (defmethod invoke ((f primitive) v* r k)
   (funcall (primitive-address f) v* r k))
@@ -247,7 +255,7 @@
 (defun cont-interpreter()
     (labels ((toplevel ()
                (evaluate (read)
-                         r.init
+                         rinit
                          (make-bottom-cont 'void print))
                (toplevel)))
       (toplevel)))
