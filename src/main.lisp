@@ -6,18 +6,18 @@
 (defun evaluate (e r k)
     (if (atom e)
         (cond ((symbolp e) (evaluate-variable e r k))
-              (else (evaluate-quote e r k)))
+              (t (evaluate-quote e r k)))
         (case (car e)
           ((quote) (evaluate-quote (cadr e) r k))
           ((if) (evaluate-if (cadr e) (caddr e) (cadddr e) r k))
           ((begin) (evaluate-begin (cdr e) r k))
           ((set!) (evaluate-set! (cadr e) (caddr e) r k))
           ((lambda) (evaluate-lambda (cadr e) (cddr e) r k))
-          (else (evaluate-application (car e) (cdr e) r k)))))
+          (t (evaluate-application (car e) (cdr e) r k)))))
 
 (defclass value () ())
 (defclass environment () ())
-(defclass continuation () (k))
+(defclass continuation () ((k :initarg :k)))
 
 (defgeneric invoke (f v* r k))
 (defgeneric resume (k v))
@@ -29,7 +29,13 @@
   (resume k v))
 
 ;; evaluate-if ========================================
-(defclass if-cont (continuation) (et ef r))
+(defclass if-cont (continuation)
+  ((et
+    :initarg :et)
+   (ef
+    :initarg :ef)
+   (r
+    :initarg :r)))
 
 (defun make-if-cont (k et ef r)
   (make-instance 'if-cont :k k :et et :ef ef :r r))
@@ -47,7 +53,11 @@
 
 
 ;; evaluate-begin ========================================
-(defclass begin-cont (continuation) (e* r))
+(defclass begin-cont (continuation)
+  ((e*
+    :initarg :e*)
+   (r
+    :initarg :r)))
 
 (defun make-begin-cont (k e* r)
   (make-instance 'begin-cont :k k :e* e* :r r))
@@ -101,7 +111,11 @@
 
 ;; evaluate-set!
 
-(defclass set!-cont (continuation) (n r))
+(defclass set!-cont (continuation)
+  ((n
+    :initarg :n)
+   (r
+    :initarg :r)))
 
 (defun make-set!-cont (k n r)
   (make-instance 'set!-cont :k k :n n :r r))
@@ -127,7 +141,13 @@
 
 ;; evaluate-lambda =========================================
 
-(defclass proceture (value) (variables body env))
+(defclass proceture (value)
+  ((variables
+    :initarg :variables)
+   (body
+    :initarg :body)
+   (env
+    :initarg :env)))
 
 (defun make-proceture (n* e* r)
   (make-instance 'proceture :variables n* :body e* :env env))
@@ -152,22 +172,35 @@
           (else (wrong "Arity mismatch"))))
 
 ;; evaluate-application ==========================================
-(defclass evfun-cont (continuation) (e* r))
+(defclass evfun-cont (continuation)
+  ((e*
+    :initarg :e*)
+   (r
+    :initarg :r)))
 
 (defun make-evfun-cont (k e* r)
   (make-instance 'evfun-cont :k k :e* e* :r r))
 
-(defclass apply-cont (continuation) (f r))
+(defclass apply-cont (continuation)
+  ((f
+    :initarg :f)
+   (r
+    :initarg :r)))
 
 (defun make-apply-cont (k f r)
   (make-instance 'apply-cont :k k :f f :r r))
 
-(defclass argument-cont (continuation) (e* r))
+(defclass argument-cont (continuation)
+  ((e*
+    :initarg :e*)
+   (r
+    :initarg :r)))
 
 (defun make-argument-cont (k e* r)
   (make-instance 'argument-cont :k k :e* e* :r r))
 
-(defclass gather-cont (continuation) (v))
+(defclass gather-cont (continuation)
+  ((v :initarg :v)))
 
 (defun make-gather-cont (k v)
   (make-instance 'gather-cont :k v :v v))
@@ -243,19 +276,20 @@
 
 (defclass bottom-cont (continuation)
   ((f
+    :initarg :f
     :accessor bottom-cont-f)))
 
 (defun make-bottom-cont (k f)
-  (make-bottom-cont 'bottom-cont :k k :f f))
+  (make-instance 'bottom-cont :k k :f f))
 
 (defmethod resume ((k bottom-cont) v)
-  (funcall (bottom-contf k) v))
+  (funcall (bottom-cont-f k) v))
 
 
 (defun cont-interpreter()
     (labels ((toplevel ()
                (evaluate (read)
                          rinit
-                         (make-bottom-cont 'void print))
+                         (make-bottom-cont 'void #'print))
                (toplevel)))
       (toplevel)))
