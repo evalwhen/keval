@@ -17,7 +17,10 @@
 
 (defclass value () ())
 (defclass environment () ())
-(defclass continuation () ((k :initarg :k)))
+(defclass continuation ()
+  ((k
+    :accessor k
+    :initarg :k)))
 
 (defgeneric invoke (f v* r k))
 (defgeneric resume (k v))
@@ -31,10 +34,13 @@
 ;; evaluate-if ========================================
 (defclass if-cont (continuation)
   ((et
+    :accessor et
     :initarg :et)
    (ef
+    :accessor ef
     :initarg :ef)
    (r
+    :accessor r
     :initarg :r)))
 
 (defun make-if-cont (k et ef r)
@@ -47,16 +53,18 @@
   (evaluate ec r (make-if-cont k et ef r)))
 
 (defmethod resume ((k if-cont) v)
-    (evaluate (if v (if-cont-et k) (if-cont-ef k))
-     (if-cont-r k)
-     (if-cont-k k)))
+    (evaluate (if v (et k) (ef k))
+     (r k)
+     (k k)))
 
 
 ;; evaluate-begin ========================================
 (defclass begin-cont (continuation)
   ((e*
+    :accessor e*
     :initarg :e*)
    (r
+    :accessor r
     :initarg :r)))
 
 (defun make-begin-cont (k e* r)
@@ -71,9 +79,9 @@
 
 (defmethod resume ((k begin-cont) v)
     (evaluate-begin
-     (cdr (begin-cont-e* k))
-     (begin-cont-r k)
-     (begin-cont-k k)))
+     (cdr (e* k))
+     (r k)
+     (k k)))
 
 ;; variable: evaluate-variable and evaluate-set! =========================
 
@@ -84,12 +92,15 @@
 ;; TODO: 为什么需要定义一个 full-env
 (defclass full-env (environment)
   ((others
+    :accessor others
     :initarg :others)
    (name
+    :accessor name
     :initarg :name)))
 
 (defclass variable-env (full-env)
   ((value
+    :accessor value
     :initarg :value)))
 
 (defun make-variable-env (others name value)
@@ -102,19 +113,22 @@
   (wrong "Unkown variable" n r k))
 
 (defmethod lookup ((r full-env) n k)
-  (lookup (full-env-others r) n k))
+  (lookup (slot-value r 'others) n k))
 
 (defmethod lookup ((r variable-env) n k)
-    (if (eqv? n (variable-env-name r))
-        (resume k (variable-env-value r))
-        (lookup (variable-env-others r) n k)))
+  (with-slots (others name value) r
+    (if (eq n name)
+        (resume k value)
+        (lookup others n k))))
 
 ;; evaluate-set!
 
 (defclass set!-cont (continuation)
   ((n
+    :accessor n
     :initarg :n)
    (r
+    :accessor r
     :initarg :r)))
 
 (defun make-set!-cont (k n r)
@@ -124,29 +138,32 @@
   (evalue e r (make-set!-cont k n r)))
 
 (defmethod resume ((k set!-cont) v)
-  (update! (set!-cont-r k) (set!-cont-n k) (set!-cont-k k) v))
+  (update! (r k) (n k) (k k) v))
 
 (defmethod update! ((r null-env) n k v)
    (wrong "Unkown variable" n r k))
 
 (defmethod update! ((r full-env) n k v)
-  (update! (full-env-others r) n k v))
+  (update! (others r) n k v))
 
 (defmethod update! ((r variable-env) n k v)
-    (if (eqv? n (variable-env-name r))
+    (if (eqv? n (name r))
         (begin
-         (set-variable-env-value! r v) ;; set object slot
+         (setf (value r) v) ;; set object slot
          (resume k v))
-        (update! (variable-env-others r) n k v)))
+        (update! (others r) n k v)))
 
 ;; evaluate-lambda =========================================
 
 (defclass proceture (value)
   ((variables
+    :accessor variables
     :initarg :variables)
    (body
+    :accessor body
     :initarg :body)
    (env
+    :accessor env
     :initarg :env)))
 
 (defun make-proceture (n* e* r)
@@ -156,10 +173,10 @@
     (resume k (make-proceture n* e* r)))
 
 (defmethod invoke ((f proceture) v* r k)
-    (let ((env (extend-env (proceture-env f)
-                           (proceture-variables f)
+    (let ((env (extend-env (env f)
+                           (variables f)
                            v*)))
-      (evaluate-begin (proceture-body f) env k)))
+      (evaluate-begin (body f) env k)))
 
 (defun extend-env (env names values)
     (cond ((and (consp names) (consp values))
@@ -174,8 +191,10 @@
 ;; evaluate-application ==========================================
 (defclass evfun-cont (continuation)
   ((e*
+    :accessor e*
     :initarg :e*)
    (r
+    :accessor r
     :initarg :r)))
 
 (defun make-evfun-cont (k e* r)
@@ -183,8 +202,10 @@
 
 (defclass apply-cont (continuation)
   ((f
+    :accessor f
     :initarg :f)
    (r
+    :accessor r
     :initarg :r)))
 
 (defun make-apply-cont (k f r)
@@ -192,15 +213,19 @@
 
 (defclass argument-cont (continuation)
   ((e*
+    :accessor e*
     :initarg :e*)
    (r
+    :accessor r
     :initarg :r)))
 
 (defun make-argument-cont (k e* r)
   (make-instance 'argument-cont :k k :e* e* :r r))
 
 (defclass gather-cont (continuation)
-  ((v :initarg :v)))
+  ((v
+    :accessor v
+    :initarg :v)))
 
 (defun make-gather-cont (k v)
   (make-instance 'gather-cont :k v :v v))
@@ -210,37 +235,39 @@
 
 (defmethod resume ((k evfun-cont) f)
     (evaluate-arguments
-     (evfun-cont-e* k)
-     (evfun-cont-r k)
+     (e* k)
+     (r k)
      (make-apply-cont
-      (evfun-cont-k k)
+      (k k)
       f
-      (evfun-cont-r k))))
+      (r k))))
+
+
+(defvar no-more-arguments '())
 
 (defun evaluate-arguments (e* r k)
     (if (consp e*)
         (evaluate (car e*) r (make-argument-cont k e* r))
-        (resume k no-more-auguments)))
+        (resume k nil)))
 
-(defconstant no-more-arguments '())
 
 (defmethod resume ((k argument-cont) v)
     (evaluate-arguments
-     (cdr (argument-cont-e* k))
-     (argument-cont-r k)
+     (cdr (e* k))
+     (r k)
      (make-gather-cont
-      (argument-cont-k k)
+      (k k)
       v)))
 
 (defmethod resume ((k gather-cont) v*)
-  (resume (gather-cont-k k) (cons (gather-cont-v k) v*)))
+  (resume (k k) (cons (v k) v*)))
 
 (defmethod resume ((k apply-cont) v)
     (invoke
-     (apply-cont-f k)
+     (f k)
      v
-     (apply-cont-r k)
-     (apply-cont-k k)))
+     (r k)
+     (k k)))
 
 ;; bootstrap ===================================================
 
@@ -264,7 +291,7 @@
 (defmacro defprimitive (name value arity)
   `(definitial ,name
       (make-primitive ',name (lambda (v* r k)
-                               (if (= arity (length v*))
+                               (if (= ,arity (length v*))
                                    (resume k (apply (function ,value) v*))
                                    (wrong "Incorrect arity" ',name v*))))))
 
