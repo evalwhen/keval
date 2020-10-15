@@ -4,16 +4,17 @@
 
 
 (defun evaluate (e r k)
-    (if (atom e)
-        (cond ((symbolp e) (evaluate-variable e r k))
-              (t (evaluate-quote e r k)))
-        (case (car e)
-          ((quote) (evaluate-quote (cadr e) r k))
-          ((if) (evaluate-if (cadr e) (caddr e) (cadddr e) r k))
-          ((begin) (evaluate-begin (cdr e) r k))
-          ((set!) (evaluate-set! (cadr e) (caddr e) r k))
-          ((lambda) (evaluate-lambda (cadr e) (cddr e) r k))
-          (t (evaluate-application (car e) (cdr e) r k)))))
+  (break)
+  (if (atom e)
+      (cond ((symbolp e) (evaluate-variable e r k))
+            (t (evaluate-quote e r k)))
+      (case (car e)
+        ((quote) (evaluate-quote (cadr e) r k))
+        ((if) (evaluate-if (cadr e) (caddr e) (cadddr e) r k))
+        ((begin) (evaluate-begin (cdr e) r k))
+        ((set!) (evaluate-set! (cadr e) (caddr e) r k))
+        ((lambda) (evaluate-lambda (cadr e) (cddr e) r k))
+        (t (evaluate-application (car e) (cdr e) r k)))))
 
 (defclass value () ())
 (defclass environment () ())
@@ -228,7 +229,7 @@
     :initarg :v)))
 
 (defun make-gather-cont (k v)
-  (make-instance 'gather-cont :k v :v v))
+  (make-instance 'gather-cont :k k :v v))
 
 (defun evaluate-application (e e* r k)
   (evaluate e r (make-evfun-cont k e* r)))
