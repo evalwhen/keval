@@ -16,6 +16,7 @@
                "rove")
   :components ((:module "tests"
                 :components
-                ((:file "main"))))
+                ((:file "main")
+                 (:file "continuation"))))
   :description "Test system for keval"
   :perform (test-op (op c) (symbol-call :rove :run c)))
